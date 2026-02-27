@@ -2,80 +2,54 @@ import streamlit as st
 from supabase import create_client
 import pandas as pd
 
-# --- CONFIGURAÇÃO DA PÁGINA ---
+# --- 1. CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Logística GMS", layout="wide", page_icon="📦")
 
-# --- CSS PERSONALIZADO (CORES DA GMS) ---
+# --- 2. CSS PERSONALIZADO ---
 st.markdown("""
     <style>
-    .stTextInput > div > div > input { border-radius: 8px; }
+    .stTextInput > div > div > input { border-radius: 8px; text-align: left; }
     .stButton>button {
-        width: 100%;
-        border-radius: 8px;
-        height: 3em;
-        background-color: #004684; /* Azul GMS */
-        color: white;
-        font-weight: bold;
+        width: auto; padding-left: 30px; padding-right: 30px;
+        border-radius: 8px; height: 3em;
+        background-color: #004684; color: white; font-weight: bold;
     }
-    .stButton>button:hover { background-color: #002d55; color: white; }
+    label { text-align: left !important; width: 100%; }
     [data-testid="stMetricValue"] { font-size: 32px; color: #004684; }
-    
-    /* Garante que o botão de sair tenha uma cor de destaque diferente se desejar */
-    .logout-btn button {
-        background-color: #d32f2f !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONFIGURAÇÃO SUPABASE ---
+# --- 3. CONEXÃO SUPABASE ---
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(URL, KEY)
 
-# --- LISTAS FIXAS ---
+# --- 4. LISTAS FIXAS ---
 VDS = ["23924-HUB", "14523-ITABATÃ", "19081-ITAMARAJU", "13483-PORTO SEGURO", "18481-TEIXEIRA", "13481-EUNÁPOLIS", "23332-BARRA"]
 PRODUTOS = ["1 - Caixas Omni PP", "2 - Caixas Omni P", "3 - Caixas Omni M", "4 - Caixas entregas P", "5 - Caixas entregas M", "6 - Etiquetas entrega", "7 - Ribbon", "8 - Fita gomada", "9 - Fita adesiva", "10 - SACOLA PP BOTI INST 2025", "11 - SACOLA P BOTI INST 2025", "12 - SACOLA M BOTI INST 2025", "13 - SACOLA G BOTI INST 2025", "14 - SACOLA PARDA M", "15 - SACOLA PARDA G"]
 UNIDADES = ["Unidade", "Caixa", "Display"]
 
-# --- FUNÇÕES DE SISTEMA ---
+# --- 5. FUNÇÕES ---
 def realizar_login(nome_digitado, senha_digitada):
     try:
         user_query = supabase.table("usuarios").select("*").ilike("nome", nome_digitado).single().execute()
         if user_query.data:
             email_tecnico = user_query.data['email']
-            res = supabase.auth.sign_in_with_password({"email": email_tecnico, "password": senha_digitada})
+            supabase.auth.sign_in_with_password({"email": email_tecnico, "password": senha_digitada})
             st.session_state["usuario_logado"] = True
             st.session_state["usuario_nome"] = user_query.data["nome"]
             st.session_state["vd_usuario"] = user_query.data["loja_responsavel"]
             st.session_state["nivel_acesso"] = user_query.data["nivel_acesso"]
             st.rerun()
-        else:
-            st.error("Usuário não cadastrado.")
     except Exception:
         st.error("Dados de acesso incorretos.")
 
-def admin_cadastrar_usuario(nome, vd, senha):
-    try:
-        email_ficticio = f"{nome.lower().replace(' ', '.')}@gmslog.com"
-        new_user = supabase.auth.admin.create_user({
-            "email": email_ficticio, "password": senha, "email_confirm": True
-        })
-        if new_user.user:
-            supabase.table("usuarios").insert({
-                "id": new_user.user.id, "nome": nome, "email": email_ficticio,
-                "loja_responsavel": vd, "nivel_acesso": "operador"
-            }).execute()
-            return True, email_ficticio
-    except Exception as e:
-        return False, str(e)
-
-# --- TELA DE ACESSO (LOGIN) ---
+# --- 6. TELA DE LOGIN ---
 if "usuario_logado" not in st.session_state or not st.session_state["usuario_logado"]:
-    st.write("##")
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
+    c1, c2, c3 = st.columns([1.1, 1, 1.1])
+    with c2:
         st.image("https://c5gwmsmjx1.execute-api.us-east-1.amazonaws.com/prod/dados_processo_seletivo/logo_empresa/129279/Logo_03@4x.png", use_container_width=True)
-        st.markdown("<h4 style='text-align: center;'> Controle de Insumos 💎 </h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='text-align: center;'>Controle de Insumos 💎</h4>", unsafe_allow_html=True)
         with st.container(border=True):
             n_login = st.text_input("Nome do Usuário")
             s_login = st.text_input("Senha", type="password")
@@ -83,97 +57,99 @@ if "usuario_logado" not in st.session_state or not st.session_state["usuario_log
                 realizar_login(n_login, s_login)
     st.stop()
 
-# --- BARRA LATERAL (SIDEBAR) ---
+# --- 7. SIDEBAR ---
 st.sidebar.image("https://c5gwmsmjx1.execute-api.us-east-1.amazonaws.com/prod/dados_processo_seletivo/logo_empresa/129279/Logo_03@4x.png", width=150)
 st.sidebar.markdown(f"👤 **{st.session_state['usuario_nome']}**")
-st.sidebar.caption(f" {st.session_state['vd_usuario']} ({st.session_state['nivel_acesso'].upper()})")
 st.sidebar.divider()
 
-# Menu de Navegação (LISTA SUSPENSA MANTIDA PARA CELULAR)
-menu_options = ["📊 Estoque Geral", "🔄 Movimentação"]
-if st.session_state["nivel_acesso"] == "admin":
-    menu_options += ["📜 Histórico Global", "⚙️ Gerenciar Sistema"]
+menu = st.sidebar.selectbox("MENU", ["📊 Estoque Geral", "🔄 Movimentação", "📜 Histórico Global", "⚙️ Gerenciar Sistema"] if st.session_state["nivel_acesso"] == "admin" else ["📊 Estoque Geral", "🔄 Movimentação"])
 
-menu = st.sidebar.selectbox("MENU DE NAVEGAÇÃO", menu_options)
+if st.sidebar.button("🚪 Sair"):
+    st.session_state["usuario_logado"] = False
+    st.rerun()
 
-# Espaçador dinâmico para empurrar o botão de sair para o final
-# No celular, o sidebar é curto, então usamos um container para organizar
-with st.sidebar.container():
-    for _ in range(12): # Ajuste esse número se o botão ficar muito longe ou muito perto
-        st.write("")
-    
-    if st.sidebar.button(" Sair do Sistema"):
-        st.session_state["usuario_logado"] = False
-        st.rerun()
+# --- 8. LOGICA DAS ABAS ---
 
-# --- CONTEÚDO PRINCIPAL ---
-
+# ABA: ESTOQUE GERAL (Sempre Consolida por Loja/Produto)
 if menu == "📊 Estoque Geral":
-    st.subheader("📊 Saldos por Unidade")
+    st.subheader("📊 Saldos Atuais")
     res = supabase.table("estoque_logistica").select("*").execute()
     df = pd.DataFrame(res.data)
     
     if not df.empty:
-        if st.session_state["nivel_acesso"] == "admin":
-            filtro_vd = st.multiselect("Filtrar por VD (Vazio = Todos)", VDS)
-            if filtro_vd:
-                df = df[df['loja'].isin(filtro_vd)]
-        else:
+        # Filtro de Acesso
+        if st.session_state["nivel_acesso"] != "admin":
             df = df[df['loja'] == st.session_state['vd_usuario']]
         
-        if 'ultima_atualizacao' in df.columns:
-            df['ultima_atualizacao'] = pd.to_datetime(df['ultima_atualizacao']).dt.strftime('%d/%m/%Y %H:%M')
-        
-        cols = ["loja", "produto", "quantidade", "tipo_unidade", "ultima_atualizacao"]
-        st.dataframe(df[[c for c in cols if c in df.columns]], use_container_width=True, hide_index=True)
+        # Formatação
+        df['ultima_atualizacao'] = pd.to_datetime(df['ultima_atualizacao']).dt.strftime('%d/%m/%Y %H:%M')
+        cols = ["loja", "produto", "quantidade", "tipo_unidade", "registrado_por", "ultima_atualizacao"]
+        st.dataframe(df[cols].sort_values(by=['loja', 'produto']), use_container_width=True, hide_index=True)
 
+# ABA: MOVIMENTAÇÃO (Ajustada para nunca duplicar)
 elif menu == "🔄 Movimentação":
-    st.subheader("🔄 Registrar Saída ou Entrada")
+    st.subheader("🔄 Registrar Movimentação")
     vd_alvo = st.session_state["vd_usuario"] if st.session_state["nivel_acesso"] == "operador" else st.selectbox("VD", VDS)
     prod_alvo = st.selectbox("Material", PRODUTOS)
     tipo_mov = st.radio("Ação", ["Saída", "Entrada"], horizontal=True)
     
+    # Busca o registro único no banco
     item = supabase.table("estoque_logistica").select("*").match({"loja": vd_alvo, "produto": prod_alvo}).execute()
+    
     if item.data:
-        saldo_atual = item.data[0]['quantidade']
-        st.metric("Saldo Atual", saldo_atual)
-        qtd = st.number_input("Quantidade", min_value=1, step=1)
-        if st.button("CONFIRMAR REGISTRO"):
-            novo_saldo = saldo_atual - qtd if tipo_mov == "Saída" else saldo_atual + qtd
-            if novo_saldo < 0: st.error("Erro: Saldo insuficiente")
+        # Se existem duplicatas no banco, pegamos a primeira e avisamos
+        registro = item.data[0] 
+        saldo_atual = registro['quantidade']
+        
+        st.metric("Saldo Atual no Sistema", f"{saldo_atual} {registro['tipo_unidade']}")
+        qtd_mov = st.number_input("Quantidade da Manobra", min_value=1, step=1)
+        
+        if st.button("CONFIRMAR"):
+            novo_saldo = saldo_atual - qtd_mov if tipo_mov == "Saída" else saldo_atual + qtd_mov
+            
+            if novo_saldo < 0:
+                st.error("Erro: Saldo insuficiente para essa saída.")
             else:
-                supabase.table("estoque_logistica").update({"quantidade": novo_saldo}).eq("id", item.data[0]['id']).execute()
+                # 1. ATUALIZA O REGISTRO EXISTENTE (Não cria novo)
+                supabase.table("estoque_logistica").update({
+                    "quantidade": novo_saldo,
+                    "registrado_por": st.session_state["usuario_nome"]
+                }).eq("id", registro['id']).execute()
+                
+                # 2. GERA O LOG NO HISTÓRICO
                 supabase.table("historico_movimentacao").insert({
                     "vd": vd_alvo, "produto": prod_alvo, "tipo": tipo_mov.upper(),
-                    "quantidade_movimentada": qtd, "saldo_anterior": saldo_atual,
+                    "quantidade_movimentada": qtd_mov, "saldo_anterior": saldo_atual,
                     "saldo_novo": novo_saldo, "usuario": st.session_state["usuario_nome"]
                 }).execute()
-                st.success("Estoque atualizado!")
+                
+                st.success(f"Sucesso! Novo saldo: {novo_saldo}")
                 st.rerun()
+    else:
+        st.warning("Este produto ainda não foi vinculado a esta loja. Vá em 'Gerenciar Sistema' primeiro.")
 
+# ABA: HISTÓRICO (Onde as linhas novas devem aparecer)
 elif menu == "📜 Histórico Global":
     st.subheader("📜 Histórico de Movimentações")
     hist = supabase.table("historico_movimentacao").select("*").order("data_movimentacao", desc=True).execute()
     if hist.data:
-        df_hist = pd.DataFrame(hist.data)
-        df_hist['data_movimentacao'] = pd.to_datetime(df_hist['data_movimentacao']).dt.strftime('%d/%m/%Y %H:%M')
-        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        df_h = pd.DataFrame(hist.data)
+        df_h['data_movimentacao'] = pd.to_datetime(df_h['data_movimentacao']).dt.strftime('%d/%m/%Y %H:%M')
+        st.dataframe(df_h, use_container_width=True, hide_index=True)
 
+# ABA: GERENCIAR (Para criar o vínculo inicial)
 elif menu == "⚙️ Gerenciar Sistema":
-    tab1, tab2 = st.tabs(["Vincular Materiais", "Cadastrar Gerentes"])
-    with tab1:
+    st.subheader("⚙️ Configurações")
+    t1, t2 = st.tabs(["📦 Vincular Material", "👤 Usuários"])
+    with t1:
         with st.form("vinculo"):
-            v, p, u = st.selectbox("VD", VDS), st.selectbox("Produto", PRODUTOS), st.selectbox("Unidade", UNIDADES)
+            v, p, u = st.selectbox("Loja", VDS), st.selectbox("Item", PRODUTOS), st.selectbox("Unidade", UNIDADES)
             q = st.number_input("Estoque Inicial", min_value=0)
-            if st.form_submit_button("VINCULAR MATERIAL"):
-                supabase.table("estoque_logistica").insert({"loja": v, "produto": p, "tipo_unidade": u, "quantidade": q, "registrado_por": st.session_state["usuario_nome"]}).execute()
-                st.success("Vinculado!")
-    with tab2:
-        with st.form("cadastro_gerente"):
-            novo_nome, loja_gerente = st.text_input("Nome Completo"), st.selectbox("Loja", VDS)
-            senha_gerente = st.text_input("Senha Padrão", value="gms123")
-            if st.form_submit_button("CRIAR ACESSO"):
-                if novo_nome:
-                    sucesso, msg = admin_cadastrar_usuario(novo_nome, loja_gerente, senha_gerente)
-                    if sucesso: st.success(f"Acesso criado para {novo_nome}!")
-                    else: st.error(f"Erro: {msg}")
+            if st.form_submit_button("VINCULAR"):
+                # Verifica se já existe antes de criar para não duplicar
+                check = supabase.table("estoque_logistica").select("id").match({"loja": v, "produto": p}).execute()
+                if check.data:
+                    st.error("Este item já está vinculado a esta loja. Use 'Movimentação' para alterar o saldo.")
+                else:
+                    supabase.table("estoque_logistica").insert({"loja": v, "produto": p, "tipo_unidade": u, "quantidade": q, "registrado_por": st.session_state["usuario_nome"]}).execute()
+                    st.success("Vinculado com sucesso!")
