@@ -8,11 +8,7 @@ st.set_page_config(page_title="Logística GMS", layout="wide", page_icon="📦")
 # --- CSS PERSONALIZADO (CORES DA GMS) ---
 st.markdown("""
     <style>
-    /* Centralizar container de login */
-    .stTextInput > div > div > input {
-        border-radius: 8px;
-    }
-    /* Estilo dos Botões */
+    .stTextInput > div > div > input { border-radius: 8px; }
     .stButton>button {
         width: 100%;
         border-radius: 8px;
@@ -21,14 +17,12 @@ st.markdown("""
         color: white;
         font-weight: bold;
     }
-    .stButton>button:hover {
-        background-color: #002d55;
-        color: white;
-    }
-    /* Métrica de Estoque */
-    [data-testid="stMetricValue"] {
-        font-size: 32px;
-        color: #004684;
+    .stButton>button:hover { background-color: #002d55; color: white; }
+    [data-testid="stMetricValue"] { font-size: 32px; color: #004684; }
+    
+    /* Garante que o botão de sair tenha uma cor de destaque diferente se desejar */
+    .logout-btn button {
+        background-color: #d32f2f !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -75,16 +69,13 @@ def admin_cadastrar_usuario(nome, vd, senha):
     except Exception as e:
         return False, str(e)
 
-# --- TELA DE ACESSO (LOGIN CENTRALIZADO COM LOGO) ---
+# --- TELA DE ACESSO (LOGIN) ---
 if "usuario_logado" not in st.session_state or not st.session_state["usuario_logado"]:
-    # Espaçamento para centralizar verticalmente
     st.write("##")
     col1, col2, col3 = st.columns([1, 1, 1])
-    
     with col2:
         st.image("https://c5gwmsmjx1.execute-api.us-east-1.amazonaws.com/prod/dados_processo_seletivo/logo_empresa/129279/Logo_03@4x.png", use_container_width=True)
-        st.markdown("<h3 style='text-align: center;'>Controle de Insumos</h3>", unsafe_allow_html=True)
-        
+        st.markdown("<h4 style='text-align: center;'> Controle de Insumos 💎 </h4>", unsafe_allow_html=True)
         with st.container(border=True):
             n_login = st.text_input("Nome do Usuário")
             s_login = st.text_input("Senha", type="password")
@@ -92,22 +83,31 @@ if "usuario_logado" not in st.session_state or not st.session_state["usuario_log
                 realizar_login(n_login, s_login)
     st.stop()
 
-# --- ÁREA LOGADA ---
+# --- BARRA LATERAL (SIDEBAR) ---
 st.sidebar.image("https://c5gwmsmjx1.execute-api.us-east-1.amazonaws.com/prod/dados_processo_seletivo/logo_empresa/129279/Logo_03@4x.png", width=150)
 st.sidebar.markdown(f"👤 **{st.session_state['usuario_nome']}**")
-st.sidebar.caption(f"📍 {st.session_state['vd_usuario']} ({st.session_state['nivel_acesso'].upper()})")
+st.sidebar.caption(f" {st.session_state['vd_usuario']} ({st.session_state['nivel_acesso'].upper()})")
+st.sidebar.divider()
 
-if st.sidebar.button("Sair do Sistema"):
-    st.session_state["usuario_logado"] = False
-    st.rerun()
-
+# Menu de Navegação (LISTA SUSPENSA MANTIDA PARA CELULAR)
 menu_options = ["📊 Estoque Geral", "🔄 Movimentação"]
 if st.session_state["nivel_acesso"] == "admin":
     menu_options += ["📜 Histórico Global", "⚙️ Gerenciar Sistema"]
 
-menu = st.sidebar.selectbox("MENU", menu_options)
+menu = st.sidebar.selectbox("MENU DE NAVEGAÇÃO", menu_options)
 
-# 1. ESTOQUE GERAL
+# Espaçador dinâmico para empurrar o botão de sair para o final
+# No celular, o sidebar é curto, então usamos um container para organizar
+with st.sidebar.container():
+    for _ in range(12): # Ajuste esse número se o botão ficar muito longe ou muito perto
+        st.write("")
+    
+    if st.sidebar.button(" Sair do Sistema"):
+        st.session_state["usuario_logado"] = False
+        st.rerun()
+
+# --- CONTEÚDO PRINCIPAL ---
+
 if menu == "📊 Estoque Geral":
     st.subheader("📊 Saldos por Unidade")
     res = supabase.table("estoque_logistica").select("*").execute()
@@ -121,14 +121,12 @@ if menu == "📊 Estoque Geral":
         else:
             df = df[df['loja'] == st.session_state['vd_usuario']]
         
-        # Formatação de Datas
         if 'ultima_atualizacao' in df.columns:
             df['ultima_atualizacao'] = pd.to_datetime(df['ultima_atualizacao']).dt.strftime('%d/%m/%Y %H:%M')
         
         cols = ["loja", "produto", "quantidade", "tipo_unidade", "ultima_atualizacao"]
         st.dataframe(df[[c for c in cols if c in df.columns]], use_container_width=True, hide_index=True)
 
-# 2. MOVIMENTAÇÃO
 elif menu == "🔄 Movimentação":
     st.subheader("🔄 Registrar Saída ou Entrada")
     vd_alvo = st.session_state["vd_usuario"] if st.session_state["nivel_acesso"] == "operador" else st.selectbox("VD", VDS)
@@ -150,10 +148,9 @@ elif menu == "🔄 Movimentação":
                     "quantidade_movimentada": qtd, "saldo_anterior": saldo_atual,
                     "saldo_novo": novo_saldo, "usuario": st.session_state["usuario_nome"]
                 }).execute()
-                st.success("Estoque atualizado com sucesso!")
+                st.success("Estoque atualizado!")
                 st.rerun()
 
-# 3. HISTÓRICO GLOBAL
 elif menu == "📜 Histórico Global":
     st.subheader("📜 Histórico de Movimentações")
     hist = supabase.table("historico_movimentacao").select("*").order("data_movimentacao", desc=True).execute()
@@ -162,9 +159,8 @@ elif menu == "📜 Histórico Global":
         df_hist['data_movimentacao'] = pd.to_datetime(df_hist['data_movimentacao']).dt.strftime('%d/%m/%Y %H:%M')
         st.dataframe(df_hist, use_container_width=True, hide_index=True)
 
-# 4. GERENCIAR SISTEMA
 elif menu == "⚙️ Gerenciar Sistema":
-    tab1, tab2 = st.tabs(["📦 Vincular Materiais", "👥 Cadastrar Gerentes"])
+    tab1, tab2 = st.tabs(["Vincular Materiais", "Cadastrar Gerentes"])
     with tab1:
         with st.form("vinculo"):
             v, p, u = st.selectbox("VD", VDS), st.selectbox("Produto", PRODUTOS), st.selectbox("Unidade", UNIDADES)
@@ -181,4 +177,3 @@ elif menu == "⚙️ Gerenciar Sistema":
                     sucesso, msg = admin_cadastrar_usuario(novo_nome, loja_gerente, senha_gerente)
                     if sucesso: st.success(f"Acesso criado para {novo_nome}!")
                     else: st.error(f"Erro: {msg}")
-
